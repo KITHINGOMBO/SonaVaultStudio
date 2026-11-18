@@ -1,0 +1,438 @@
+{
+  "entities": {
+    "UserPrivate": {
+      "title": "UserPrivate",
+      "description": "Private user account record isolated by owner UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Collaborative multi-track recording, mixing, and mastering session.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "genre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "bpm": {
+          "type": "number"
+        },
+        "timeSignature": {
+          "type": "string",
+          "maxLength": 10
+        },
+        "musicalKey": {
+          "type": "string",
+          "maxLength": 24
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "ownerName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "masterSettings": {
+          "type": "object"
+        },
+        "trackCount": {
+          "type": "number"
+        },
+        "trackIds": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "genre",
+        "bpm",
+        "timeSignature",
+        "musicalKey",
+        "ownerId",
+        "ownerName",
+        "masterSettings",
+        "trackCount",
+        "trackIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ProjectMember": {
+      "title": "ProjectMember",
+      "description": "Project collaborator membership record stored as a subcollection under the project.",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner", "editor", "viewer"]
+        },
+        "inviteId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["projectId", "userId", "ownerId", "displayName", "role", "joinedAt"]
+    },
+    "ProjectMembership": {
+      "title": "ProjectMembership",
+      "description": "User-scoped index entry enabling secure list queries across owned and shared projects.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 256
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "projectTitle": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "ownerName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner", "editor", "viewer"]
+        },
+        "inviteId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "projectId", "userId", "ownerId", "projectTitle", "ownerName", "role", "updatedAt"]
+    },
+    "Track": {
+      "title": "Track",
+      "description": "Individual audio track stem with timeline, mix, EQ, compression, and AI noise-removal settings.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "ownerId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "authorId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "authorName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "instrument": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "durationSec": { "type": "number" },
+        "sampleRate": { "type": "number" },
+        "channels": { "type": "number" },
+        "startOffsetSec": { "type": "number" },
+        "trimStartSec": { "type": "number" },
+        "trimEndSec": { "type": "number" },
+        "volumeDb": { "type": "number" },
+        "pan": { "type": "number" },
+        "muted": { "type": "boolean" },
+        "solo": { "type": "boolean" },
+        "aiDenoiseEnabled": { "type": "boolean" },
+        "aiDenoiseStrength": { "type": "number" },
+        "vocalPreserveMode": { "type": "boolean" },
+        "eqLowDb": { "type": "number" },
+        "eqMidDb": { "type": "number" },
+        "eqHighDb": { "type": "number" },
+        "compThresholdDb": { "type": "number" },
+        "compRatio": { "type": "number" },
+        "reverbSend": { "type": "number" },
+        "delaySend": { "type": "number" },
+        "chunkCount": { "type": "number" },
+        "totalBytes": { "type": "number" },
+        "peaks": { "type": "array" },
+        "aiNoiseProfile": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "ownerId",
+        "authorId",
+        "authorName",
+        "name",
+        "instrument",
+        "color",
+        "durationSec",
+        "sampleRate",
+        "channels",
+        "startOffsetSec",
+        "trimStartSec",
+        "trimEndSec",
+        "volumeDb",
+        "pan",
+        "muted",
+        "solo",
+        "aiDenoiseEnabled",
+        "aiDenoiseStrength",
+        "vocalPreserveMode",
+        "eqLowDb",
+        "eqMidDb",
+        "eqHighDb",
+        "compThresholdDb",
+        "compRatio",
+        "reverbSend",
+        "delaySend",
+        "chunkCount",
+        "totalBytes",
+        "peaks",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TrackChunk": {
+      "title": "TrackChunk",
+      "description": "Compressed base64 audio chunk belonging to a track stem.",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "trackId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "authorId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "memberUids": { "type": "array" },
+        "index": { "type": "number" },
+        "encoding": { "type": "string", "maxLength": 32 },
+        "data": { "type": "string", "maxLength": 650000 },
+        "byteLength": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectId", "trackId", "authorId", "memberUids", "index", "encoding", "data", "byteLength", "createdAt"]
+    },
+    "SessionComment": {
+      "title": "SessionComment",
+      "description": "Timestamped collaborator mix note on a project.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "authorId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "authorName": { "type": "string", "maxLength": 100 },
+        "timecodeSec": { "type": "number" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "projectId", "authorId", "authorName", "timecodeSec", "text", "createdAt"]
+    },
+    "ProjectInvite": {
+      "title": "ProjectInvite",
+      "description": "Collaborator invitation for a studio project.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "projectId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "projectTitle": { "type": "string", "maxLength": 100 },
+        "inviterId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "maxLength": 128
+        },
+        "inviterName": { "type": "string", "maxLength": 100 },
+        "inviteeEmail": { "type": "string", "format": "email", "maxLength": 256 },
+        "role": { "type": "string", "enum": ["editor", "viewer"] },
+        "status": { "type": "string", "enum": ["pending", "accepted", "revoked"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "projectId",
+        "projectTitle",
+        "inviterId",
+        "inviterName",
+        "inviteeEmail",
+        "role",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPrivate" },
+      "description": "Private user account profiles accessible only to the owning user."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Multi-track music studio projects."
+    },
+    "/projects/{projectId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/ProjectMember" },
+      "description": "Master-gate membership records for project collaborators."
+    },
+    "/projectMemberships/{membershipId}": {
+      "schema": { "$ref": "#/entities/ProjectMembership" },
+      "description": "User-indexed membership docs for secure list queries."
+    },
+    "/projects/{projectId}/tracks/{trackId}": {
+      "schema": { "$ref": "#/entities/Track" },
+      "description": "Audio tracks and mix/denoise settings within a project."
+    },
+    "/projects/{projectId}/tracks/{trackId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/TrackChunk" },
+      "description": "Chunked compressed audio buffers for a track."
+    },
+    "/projects/{projectId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/SessionComment" },
+      "description": "Timestamped collaboration notes on a project."
+    },
+    "/invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/ProjectInvite" },
+      "description": "Pending and accepted collaborator invitations."
+    }
+  }
+}

@@ -1,0 +1,457 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidMembershipId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 260 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    // Master Gate helpers for project collaboration
+    function isProjectMember(projectId) {
+      return exists(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid));
+    }
+
+    function memberRole(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function isProjectOwner(projectId) {
+      return isVerifiedUser() && isProjectMember(projectId) && memberRole(projectId) == 'owner';
+    }
+
+    function isProjectEditor(projectId) {
+      return isVerifiedUser() && isProjectMember(projectId) && (memberRole(projectId) == 'owner' || memberRole(projectId) == 'editor');
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserPrivate(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 256
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 512))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMasterSettings(ms) {
+      return ms is map
+        && ms.keys().hasAll(['eqLowDb', 'eqMidDb', 'eqHighDb', 'eqAirDb', 'stereoWidth', 'compThresholdDb', 'compRatio', 'limiterCeilingDb', 'limiterDriveDb', 'targetLufs', 'presetName'])
+        && ms.keys().hasOnly(['eqLowDb', 'eqMidDb', 'eqHighDb', 'eqAirDb', 'stereoWidth', 'compThresholdDb', 'compRatio', 'limiterCeilingDb', 'limiterDriveDb', 'targetLufs', 'presetName'])
+        && ms.eqLowDb is number && ms.eqLowDb >= -18 && ms.eqLowDb <= 18
+        && ms.eqMidDb is number && ms.eqMidDb >= -18 && ms.eqMidDb <= 18
+        && ms.eqHighDb is number && ms.eqHighDb >= -18 && ms.eqHighDb <= 18
+        && ms.eqAirDb is number && ms.eqAirDb >= -18 && ms.eqAirDb <= 18
+        && ms.stereoWidth is number && ms.stereoWidth >= 0 && ms.stereoWidth <= 2
+        && ms.compThresholdDb is number && ms.compThresholdDb >= -60 && ms.compThresholdDb <= 0
+        && ms.compRatio is number && ms.compRatio >= 1 && ms.compRatio <= 20
+        && ms.limiterCeilingDb is number && ms.limiterCeilingDb >= -6 && ms.limiterCeilingDb <= 0
+        && ms.limiterDriveDb is number && ms.limiterDriveDb >= 0 && ms.limiterDriveDb <= 18
+        && ms.targetLufs is number && ms.targetLufs >= -24 && ms.targetLufs <= -6
+        && ms.presetName is string && ms.presetName.size() >= 1 && ms.presetName.size() <= 60;
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'title', 'genre', 'bpm', 'timeSignature', 'musicalKey', 'ownerId', 'ownerName', 'masterSettings', 'trackCount', 'trackIds', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'genre', 'bpm', 'timeSignature', 'musicalKey', 'ownerId', 'ownerName', 'masterSettings', 'trackCount', 'trackIds', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 100
+        && data.genre is string && data.genre.size() >= 1 && data.genre.size() <= 40
+        && data.bpm is number && data.bpm >= 40 && data.bpm <= 240
+        && data.timeSignature is string && data.timeSignature.size() >= 3 && data.timeSignature.size() <= 10
+        && data.musicalKey is string && data.musicalKey.size() >= 1 && data.musicalKey.size() <= 24
+        && isValidId(data.ownerId)
+        && data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100
+        && isValidMasterSettings(data.masterSettings)
+        && data.trackCount is number && data.trackCount >= 0 && data.trackCount <= 64
+        && data.trackIds is list && data.trackIds.size() <= 64 && (data.trackIds.size() == 0 || data.trackIds[0] is string)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProjectMember(data) {
+      return data.keys().hasAll(['projectId', 'userId', 'ownerId', 'displayName', 'role', 'joinedAt'])
+        && data.keys().hasOnly(['projectId', 'userId', 'ownerId', 'displayName', 'role', 'inviteId', 'joinedAt'])
+        && isValidId(data.projectId)
+        && isValidId(data.userId)
+        && isValidId(data.ownerId)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.role in ['owner', 'editor', 'viewer']
+        && (!('inviteId' in data) || isValidId(data.inviteId))
+        && data.joinedAt is timestamp;
+    }
+
+    function isValidProjectMembership(data) {
+      return data.keys().hasAll(['id', 'projectId', 'userId', 'ownerId', 'projectTitle', 'ownerName', 'role', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'projectId', 'userId', 'ownerId', 'projectTitle', 'ownerName', 'role', 'inviteId', 'updatedAt'])
+        && isValidMembershipId(data.id)
+        && isValidId(data.projectId)
+        && isValidId(data.userId)
+        && isValidId(data.ownerId)
+        && data.projectTitle is string && data.projectTitle.size() >= 1 && data.projectTitle.size() <= 100
+        && data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 100
+        && data.role in ['owner', 'editor', 'viewer']
+        && (!('inviteId' in data) || isValidId(data.inviteId))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTrack(data) {
+      return data.keys().hasAll([
+          'id', 'projectId', 'ownerId', 'authorId', 'authorName', 'name', 'instrument', 'color',
+          'durationSec', 'sampleRate', 'channels', 'startOffsetSec', 'trimStartSec', 'trimEndSec',
+          'volumeDb', 'pan', 'muted', 'solo', 'aiDenoiseEnabled', 'aiDenoiseStrength', 'vocalPreserveMode',
+          'eqLowDb', 'eqMidDb', 'eqHighDb', 'compThresholdDb', 'compRatio', 'reverbSend', 'delaySend',
+          'chunkCount', 'totalBytes', 'peaks', 'memberUids', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'projectId', 'ownerId', 'authorId', 'authorName', 'name', 'instrument', 'color',
+          'durationSec', 'sampleRate', 'channels', 'startOffsetSec', 'trimStartSec', 'trimEndSec',
+          'volumeDb', 'pan', 'muted', 'solo', 'aiDenoiseEnabled', 'aiDenoiseStrength', 'vocalPreserveMode',
+          'eqLowDb', 'eqMidDb', 'eqHighDb', 'compThresholdDb', 'compRatio', 'reverbSend', 'delaySend',
+          'chunkCount', 'totalBytes', 'peaks', 'memberUids', 'aiNoiseProfile', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.projectId)
+        && isValidId(data.ownerId)
+        && isValidId(data.authorId)
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.instrument is string && data.instrument.size() >= 1 && data.instrument.size() <= 40
+        && data.color is string && data.color.size() >= 4 && data.color.size() <= 16
+        && data.durationSec is number && data.durationSec >= 0 && data.durationSec <= 1800
+        && data.sampleRate is number && data.sampleRate >= 8000 && data.sampleRate <= 192000
+        && data.channels is number && data.channels >= 1 && data.channels <= 2
+        && data.startOffsetSec is number && data.startOffsetSec >= 0 && data.startOffsetSec <= 1800
+        && data.trimStartSec is number && data.trimStartSec >= 0 && data.trimStartSec <= 1800
+        && data.trimEndSec is number && data.trimEndSec >= 0 && data.trimEndSec <= 1800
+        && data.volumeDb is number && data.volumeDb >= -60 && data.volumeDb <= 12
+        && data.pan is number && data.pan >= -1 && data.pan <= 1
+        && data.muted is bool
+        && data.solo is bool
+        && data.aiDenoiseEnabled is bool
+        && data.aiDenoiseStrength is number && data.aiDenoiseStrength >= 0 && data.aiDenoiseStrength <= 1
+        && data.vocalPreserveMode is bool
+        && data.eqLowDb is number && data.eqLowDb >= -18 && data.eqLowDb <= 18
+        && data.eqMidDb is number && data.eqMidDb >= -18 && data.eqMidDb <= 18
+        && data.eqHighDb is number && data.eqHighDb >= -18 && data.eqHighDb <= 18
+        && data.compThresholdDb is number && data.compThresholdDb >= -60 && data.compThresholdDb <= 0
+        && data.compRatio is number && data.compRatio >= 1 && data.compRatio <= 20
+        && data.reverbSend is number && data.reverbSend >= 0 && data.reverbSend <= 1
+        && data.delaySend is number && data.delaySend >= 0 && data.delaySend <= 1
+        && data.chunkCount is number && data.chunkCount >= 0 && data.chunkCount <= 200
+        && data.totalBytes is number && data.totalBytes >= 0 && data.totalBytes <= 60000000
+        && data.peaks is list && data.peaks.size() >= 1 && data.peaks.size() <= 240 && data.peaks[0] is number
+        && data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 16 && data.memberUids[0] is string
+        && (!('aiNoiseProfile' in data) || (data.aiNoiseProfile is map && data.aiNoiseProfile.keys().size() <= 20))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTrackChunk(data) {
+      return data.keys().hasAll(['projectId', 'trackId', 'authorId', 'memberUids', 'index', 'encoding', 'data', 'byteLength', 'createdAt'])
+        && data.keys().hasOnly(['projectId', 'trackId', 'authorId', 'memberUids', 'index', 'encoding', 'data', 'byteLength', 'createdAt'])
+        && isValidId(data.projectId)
+        && isValidId(data.trackId)
+        && isValidId(data.authorId)
+        && data.authorId == request.auth.uid
+        && data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 16 && data.memberUids[0] is string
+        && data.index is number && data.index >= 0 && data.index <= 200
+        && data.encoding is string && data.encoding.size() >= 1 && data.encoding.size() <= 32
+        && data.data is string && data.data.size() >= 1 && data.data.size() <= 650000
+        && data.byteLength is number && data.byteLength >= 1 && data.byteLength <= 650000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['id', 'projectId', 'authorId', 'authorName', 'memberUids', 'timecodeSec', 'text', 'createdAt'])
+        && data.keys().hasOnly(['id', 'projectId', 'authorId', 'authorName', 'memberUids', 'timecodeSec', 'text', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.projectId)
+        && isValidId(data.authorId)
+        && data.authorId == request.auth.uid
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100
+        && data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 16 && data.memberUids[0] is string
+        && data.timecodeSec is number && data.timecodeSec >= 0 && data.timecodeSec <= 3600
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 500
+        && data.createdAt is timestamp;
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasAll(['id', 'projectId', 'projectTitle', 'inviterId', 'inviterName', 'inviteeEmail', 'role', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'projectId', 'projectTitle', 'inviterId', 'inviterName', 'inviteeEmail', 'role', 'status', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.projectId)
+        && data.projectTitle is string && data.projectTitle.size() >= 1 && data.projectTitle.size() <= 100
+        && isValidId(data.inviterId)
+        && data.inviterName is string && data.inviterName.size() >= 1 && data.inviterName.size() <= 100
+        && data.inviteeEmail is string && data.inviteeEmail.size() >= 3 && data.inviteeEmail.size() <= 256
+        && data.role in ['editor', 'viewer']
+        && data.status in ['pending', 'accepted', 'revoked']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // 1. Private User PII
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidId(userId)
+        && isValidUserPrivate(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(userId) && isValidId(userId)
+        && isValidUserPrivate(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'email', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // 2. Projects
+    match /projects/{projectId} {
+      allow get: if isVerifiedUser() && isValidId(projectId)
+        && (existing().ownerId == request.auth.uid || isProjectMember(projectId));
+      allow list: if isVerifiedUser() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidId(projectId)
+        && isValidProject(incoming())
+        && incoming().id == projectId
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/projects/$(projectId)/members/$(request.auth.uid))
+        && existsAfter(/databases/$(database)/documents/projectMemberships/$(projectId + '_' + request.auth.uid));
+      allow update: if isVerifiedUser() && isValidId(projectId)
+        && isValidProject(incoming())
+        && incoming().id == existing().id
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isProjectOwner(projectId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'genre', 'bpm', 'timeSignature', 'musicalKey', 'masterSettings', 'trackCount', 'trackIds', 'updatedAt'])) ||
+          (isProjectEditor(projectId) && incoming().diff(existing()).affectedKeys().hasOnly(['bpm', 'timeSignature', 'musicalKey', 'masterSettings', 'trackCount', 'trackIds', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(projectId)
+        && existing().ownerId == request.auth.uid;
+
+      // 3. Project Members (Master Gate Subcollection)
+      match /members/{memberId} {
+        allow get: if isVerifiedUser() && isValidId(projectId) && isValidId(memberId)
+          && (memberId == request.auth.uid || isProjectMember(projectId));
+        allow list: if isVerifiedUser() && (existing().ownerId == request.auth.uid || existing().userId == request.auth.uid);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(memberId)
+          && isValidProjectMember(incoming())
+          && incoming().projectId == projectId
+          && incoming().userId == memberId
+          && incoming().joinedAt == request.time
+          && (
+            (
+              memberId == request.auth.uid
+              && incoming().ownerId == request.auth.uid
+              && incoming().role == 'owner'
+              && existsAfter(/databases/$(database)/documents/projects/$(projectId))
+              && getAfter(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid
+            ) ||
+            (
+              memberId == request.auth.uid
+              && incoming().role != 'owner'
+              && ('inviteId' in incoming())
+              && isValidId(incoming().inviteId)
+              && exists(/databases/$(database)/documents/invites/$(incoming().inviteId))
+              && get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.projectId == projectId
+              && get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.inviteeEmail == request.auth.token.email
+              && get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.status == 'pending'
+              && get(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.role == incoming().role
+              && getAfter(/databases/$(database)/documents/invites/$(incoming().inviteId)).data.status == 'accepted'
+              && existsAfter(/databases/$(database)/documents/projectMemberships/$(projectId + '_' + memberId))
+            )
+          );
+        allow update: if isVerifiedUser() && isValidId(projectId) && isValidId(memberId)
+          && isValidProjectMember(incoming())
+          && incoming().projectId == existing().projectId
+          && incoming().userId == existing().userId
+          && incoming().ownerId == existing().ownerId
+          && incoming().joinedAt == existing().joinedAt
+          && existing().ownerId == request.auth.uid
+          && memberId != request.auth.uid
+          && incoming().role in ['editor', 'viewer']
+          && incoming().diff(existing()).affectedKeys().hasOnly(['role']);
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(memberId)
+          && (
+            (existing().ownerId == request.auth.uid && memberId != request.auth.uid) ||
+            (memberId == request.auth.uid && existing().role != 'owner')
+          );
+      }
+
+      // 4. Project Tracks
+      match /tracks/{trackId} {
+        allow get: if isVerifiedUser() && isValidId(projectId) && isValidId(trackId)
+          && isProjectMember(projectId);
+        allow list: if isVerifiedUser()
+          && (existing().ownerId == request.auth.uid || request.auth.uid in existing().memberUids);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(trackId)
+          && isValidTrack(incoming())
+          && incoming().id == trackId
+          && incoming().projectId == projectId
+          && incoming().authorId == request.auth.uid
+          && request.auth.uid in incoming().memberUids
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/projects/$(projectId))
+          && isProjectEditor(projectId);
+        allow update: if isVerifiedUser() && isValidId(projectId) && isValidId(trackId)
+          && isValidTrack(incoming())
+          && incoming().id == existing().id
+          && incoming().projectId == existing().projectId
+          && incoming().ownerId == existing().ownerId
+          && incoming().authorId == existing().authorId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && isProjectEditor(projectId)
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'instrument', 'color', 'startOffsetSec', 'trimStartSec', 'trimEndSec',
+              'volumeDb', 'pan', 'muted', 'solo', 'aiDenoiseEnabled', 'aiDenoiseStrength', 'vocalPreserveMode',
+              'eqLowDb', 'eqMidDb', 'eqHighDb', 'compThresholdDb', 'compRatio', 'reverbSend', 'delaySend',
+              'aiNoiseProfile', 'memberUids', 'updatedAt'
+            ])
+          );
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(trackId)
+          && (existing().authorId == request.auth.uid || isProjectOwner(projectId));
+
+        // 5. Chunked Compressed Audio Stems
+        match /chunks/{chunkId} {
+          allow get: if isVerifiedUser() && isValidId(projectId) && isValidId(trackId) && isValidId(chunkId)
+            && isProjectMember(projectId);
+          allow list: if isVerifiedUser()
+            && (existing().authorId == request.auth.uid || request.auth.uid in existing().memberUids);
+          allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(trackId) && isValidId(chunkId)
+            && isValidTrackChunk(incoming())
+            && incoming().projectId == projectId
+            && incoming().trackId == trackId
+            && request.auth.uid in incoming().memberUids
+            && incoming().createdAt == request.time
+            && isProjectEditor(projectId);
+          allow update: if false;
+          allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(trackId) && isValidId(chunkId)
+            && (existing().authorId == request.auth.uid || isProjectOwner(projectId));
+        }
+      }
+
+      // 6. Session Comments
+      match /comments/{commentId} {
+        allow get: if isVerifiedUser() && isValidId(projectId) && isValidId(commentId)
+          && isProjectMember(projectId);
+        allow list: if isVerifiedUser()
+          && (request.auth.uid in existing().memberUids);
+        allow create: if isVerifiedUser() && isValidId(projectId) && isValidId(commentId)
+          && isValidComment(incoming())
+          && incoming().id == commentId
+          && incoming().projectId == projectId
+          && request.auth.uid in incoming().memberUids
+          && incoming().createdAt == request.time
+          && isProjectMember(projectId);
+        allow update: if false;
+        allow delete: if isVerifiedUser() && isValidId(projectId) && isValidId(commentId)
+          && (existing().authorId == request.auth.uid || isProjectOwner(projectId));
+      }
+    }
+
+    // 7. User Project Memberships Index
+    match /projectMemberships/{membershipId} {
+      allow get: if isVerifiedUser() && isValidMembershipId(membershipId)
+        && (existing().userId == request.auth.uid || existing().ownerId == request.auth.uid);
+      allow list: if isVerifiedUser() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidMembershipId(membershipId)
+        && isValidProjectMembership(incoming())
+        && membershipId == (incoming().projectId + '_' + incoming().userId)
+        && incoming().userId == request.auth.uid
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/projects/$(incoming().projectId)/members/$(request.auth.uid));
+      allow update: if isVerifiedUser() && isValidMembershipId(membershipId)
+        && isValidProjectMembership(incoming())
+        && incoming().id == existing().id
+        && incoming().projectId == existing().projectId
+        && incoming().userId == existing().userId
+        && incoming().ownerId == existing().ownerId
+        && incoming().updatedAt == request.time
+        && (
+          (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['projectTitle', 'role', 'updatedAt'])) ||
+          (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['projectTitle', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidMembershipId(membershipId)
+        && (existing().userId == request.auth.uid || existing().ownerId == request.auth.uid);
+    }
+
+    // 8. Collaborator Invites
+    match /invites/{inviteId} {
+      allow get: if isVerifiedUser() && isValidId(inviteId)
+        && (existing().inviterId == request.auth.uid || existing().inviteeEmail == request.auth.token.email);
+      allow list: if isVerifiedUser()
+        && (existing().inviterId == request.auth.uid || existing().inviteeEmail == request.auth.token.email);
+      allow create: if isVerifiedUser() && isValidId(inviteId)
+        && isValidInvite(incoming())
+        && incoming().id == inviteId
+        && incoming().inviterId == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isProjectOwner(incoming().projectId);
+      allow update: if isVerifiedUser() && isValidId(inviteId)
+        && isValidInvite(incoming())
+        && existing().status == 'pending'
+        && incoming().id == existing().id
+        && incoming().projectId == existing().projectId
+        && incoming().inviterId == existing().inviterId
+        && incoming().inviteeEmail == existing().inviteeEmail
+        && incoming().role == existing().role
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (existing().inviteeEmail == request.auth.token.email
+            && incoming().status == 'accepted'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            && existsAfter(/databases/$(database)/documents/projects/$(existing().projectId)/members/$(request.auth.uid))) ||
+          (existing().inviterId == request.auth.uid
+            && incoming().status == 'revoked'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(inviteId)
+        && existing().inviterId == request.auth.uid;
+    }
+  }
+}

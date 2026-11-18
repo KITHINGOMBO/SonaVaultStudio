@@ -1,0 +1,6 @@
+{
+  "name": "SonaVault Studio",
+  "description": "Multi-track music recording, AI vocal-preserving noise removal, mixing, mastering, and cloud collaboration studio.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
